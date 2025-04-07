@@ -81,24 +81,24 @@ def make_links(input_dir, output_dir, dry_run=False):
         if os.path.isdir(p) and not os.path.islink(p):
             v_out(3, "p = '%s', relative = '%s'" % (p, relative))
             if dry_run:
-                print 'creating directory ' + dest
+                print('creating directory ' + dest)
             else:
                 v_out(1, 'creating directory ' + dest)
-                os.mkdir(dest, 0777)
+                os.mkdir(dest, 0o777)
         else:
             # This is the original source relative to the destination
             source_rel_to_destdir = os.path.relpath(p, os.path.dirname(dest))
 
             v_out(3, "p = '%s', relative = '%s', dest = '%s'" % (p, relative, dest))
             if dry_run:
-                print 'creating symlink from %s to %s' % (source_rel_to_destdir, dest)
+                print('creating symlink from %s to %s' % (source_rel_to_destdir, dest))
             else:
                 v_out(2, 'creating symlink from %s to %s' % (source_rel_to_destdir, dest))
                 os.symlink(source_rel_to_destdir, dest)
 
 def v_out(level, str):
-    if VERBOSITY >= level:
-        print (' ' * level) + str
+    if VERBOSITY != None and VERBOSITY >= level:
+        print(' ' * level) + str
 
 def main(argv=None):
     args = parse_args(argv)
@@ -106,7 +106,7 @@ def main(argv=None):
     global VERBOSITY
     VERBOSITY = args.verbosity
 
-    print "Creating symlinks in %(output_dir)s from %(input_dir)s" % vars(args)
+    print("Creating symlinks in %(output_dir)s from %(input_dir)s" % vars(args))
 
     make_links(args.input_dir, args.output_dir, args.dry_run)
 
