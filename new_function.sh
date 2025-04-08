@@ -51,9 +51,9 @@ _EOF_
 git add $file
 
 if [ -n "$VISUAL" ]; then
-    $VISUAL $file &
+    $VISUAL "$file" &
 elif [ -n "$EDITOR" ]; then
-    $EDITOR file
+    $EDITOR "$file"
 fi
 
 cat << _EOF_
