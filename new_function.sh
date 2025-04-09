@@ -18,6 +18,7 @@ _EOF_
 }
 
 [ $# -eq 1 ] || usage
+[ "$1" -ne '-h' -o "$1" -ne "--help" ] || usage
 
 name=`echo $1 | sed -e 's/\.sql$//'`
 echo $name | grep -q / && error "WARNING: '/' detected in function name ($1)"
