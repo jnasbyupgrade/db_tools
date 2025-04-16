@@ -71,14 +71,66 @@ file_sanity() {
   done
 }
 
+#
+# run_psql debug_level <psql arguments>
+#
+# debug_level is passed to debugging commands
+#
+# Must pass at least 1 psql argument
+run_psql() {
+  local debug_level cmd
+  [ $# -ge 2 ] || die invalid invocation of run_psql
+
+  debug_level=$1
+  shift
+
+  cmd='psql --no-psqlrc'
+  debug $debug_level $cmd "$@"
+  $cmd "$@"
+}
+
 db_exists() {
     local exists
-    exists=`psql -qtc "SELECT EXISTS( SELECT 1 FROM pg_database WHERE datname = '$dbname' )" postgres $@ | tr -d ' '`
+    exists=$(run_psql 29 -qtc "SELECT EXISTS( SELECT 1 FROM pg_database WHERE datname = '$dbname' )" postgres $@ | tr -d ' ')
     if [ "$exists" == "t" ]; then
         return 0
     else
         return 1
     fi
+}
+
+set_PGCONFIG() {
+  debug 99 set_PGCONFIG
+  debug_vars 99 PGCONFIG
+  if [[ -z ${PGCONFIG+x} ]]; then
+    PGCONFIG=$(which pg_config)
+    debug_vars 199 PGCONFIG
+  fi
+  debug_vars 98 PGCONFIG
+  [[ -n "$PGCONFIG" ]] || die 1 'Unable to find pg_config; add it to $PATH or set $PGCONFIG'
+}
+
+set_PGXN() {
+  debug 99 set_PGXN
+  debug_vars 99 PGXN
+  if [[ -z ${PGXN+x} ]]; then
+    PGXN=$(which pgxn)
+  fi
+  [[ -n "$PGXN" ]] || die 1 "Unable to find pgxn; add it to \$PATH or set \$PGXN
+
+PGXN install instructions are at https://pgxn.github.io/pgxnclient/"
+}
+
+# This is a separate function to allow for customization. All that ultimately matters is that EXTDIR gets set.
+pgxn_install_setup() {
+  debug 99 pgxn_install_setup
+  debug_vars 99 EXTDIR
+  if [[ -z ${EXTDIR+x} ]]; then
+    set_PGCONFIG
+
+    EXTDIR=$($PGCONFIG --sharedir)/extension || die 1 "$PGCONFIG returned $?"
+  fi
+  debug_vars 88 EXTDIR
 }
 
 pgxn_install() {
@@ -104,6 +156,11 @@ pgxn_install() {
     fi
     debug_vars 7 name version namever options
 
+    #PGXN=${PGXN:-}
+    #EXTDIR=${EXTDIR:-}
+    set_PGXN
+    pgxn_install_setup
+    [[ -n "$EXTDIR" ]] || die 9 '$EXTDIR must be set. See pgxn_install_set_EXTDIR()'
 
     # Bounce out if already installed and same version
     local control
@@ -112,7 +169,7 @@ pgxn_install() {
         # If we don't care about version bounce out now
         [ -z "$version" ] && return
 
-        instver=`grep default_version $control | cut -d"'" -f2`
+        instver=$(grep default_version $control | cut -d"'" -f2)
         debug_vars 9 instver
         [ -n "$instver" ] || die 4 $'\nunable to determine installed version of $name'
 

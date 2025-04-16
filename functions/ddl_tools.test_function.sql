@@ -218,7 +218,7 @@ BEGIN
       RETURN NEXT skip( 'Tracking table does not exist' );
   END;
 
-  SET LOCAL client_min_messages = PANIC;
+  SET LOCAL client_min_messages = ERROR;
   RETURN NEXT lives_ok(
     c_test_call
     , 'Can create a test function'

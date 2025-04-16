@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 BASEDIR=`dirname $0`
 if ! . $BASEDIR/lib/util.sh; then
@@ -15,19 +15,24 @@ $0 [options] [database_name | psql options]
 
 where options are
 
-  -r      rebuild database
-  -s service_name  specify a servicename for $PGSERVICE
-  -t      regex of test suites to run
-  -h      display this message
+  -r                rebuild database
+  -s service_name   specify a servicename for $PGSERVICE
+  -t                regex of test suites to run
+  -m                maximum number of failures allowed
+  -p                options for pg_prove
+
+  -h                display this message
 _EOF_
 }
 
-while getopts hrs:t: arg
+while getopts hrs:t:m:p: arg
 do
   case "$arg" in
     r)  rebuild=1;;
     s)  export PGSERVICE="$OPTARG";;
     t)  tests="$OPTARG";;
+    m)  max_fail="$OPTARG";;
+    p)  prove_opts="$OPTARG";;
 
     h)
       usage
@@ -43,7 +48,11 @@ if [ $OPTIND -gt 1 ]; then
   shift $(($OPTIND-1))
 fi
 psql_opts=$@
+debug_vars 19 rebuild PGSERVICE tests max_fail psql_opts
 
+if [[ -n "$max_fail" && ! "$max_fail" =~ ^[0-9]+$ ]]; then
+  die 1 "-m must specify an integer" 
+fi
 
 if [ -n "$tests" ]; then
   # TODO: Use bound parameters
@@ -56,7 +65,7 @@ if [ -n "$rebuild" ]; then
 fi
 
 
-DBNAME=`psql -qtc 'SELECT current_database()' $psql_opts | sed -e 's/^ //'` || exit $?
+DBNAME=$(run_psql 19 -qtc 'SELECT current_database()' $psql_opts | sed -e 's/^ //') || exit $?
 TEST_SCHEMA_SQL=\
 "SELECT nspname
 	FROM
@@ -66,7 +75,7 @@ TEST_SCHEMA_SQL=\
     $tests
 ;"
 
-TEST_SCHEMAS=`psql -qtc "$TEST_SCHEMA_SQL" $psql_opts | sed -e 's/^ //'` || exit $?
+TEST_SCHEMAS=`run_psql 19 -qtc "$TEST_SCHEMA_SQL" $psql_opts | sed -e 's/^ //'` || exit $?
 
 TAP_SCHEMA_SQL=\
 "SELECT nspname
@@ -74,16 +83,21 @@ TAP_SCHEMA_SQL=\
     JOIN pg_namespace n ON n.oid = e.extnamespace
   WHERE extname='pgtap'
 ;"
-TAP_SCHEMA=`psql -qtc "$TAP_SCHEMA_SQL" $psql_opts | sed -e 's/^ //'` || exit $?
+TAP_SCHEMA=`run_psql 19 -qtc "$TAP_SCHEMA_SQL" $psql_opts | sed -e 's/^ //'` || exit $?
 debug_vars 9 DBNAME TAP_SCHEMA TEST_SCHEMAS
 
 [ -n "$TAP_SCHEMA" ] || die 2 "pgTap extension is not installed in database $DBNAME"
 
 fail=0
 for schema in $TEST_SCHEMAS; do
-  PGOPTIONS="-c search_path=$TAP_SCHEMA" pg_prove --trap --state hot,all,save --failures --runtests --match '^(?!__)' --jobs 9 --schema $schema -d $psql_opts
+  debug 11 PGOPTIONS="-c search_path=$TAP_SCHEMA" pg_prove --trap --state hot,all,save --failures --runtests --match '^(?!__)' --jobs 9 --schema $schema -d $psql_opts $prove_opts
+  PGOPTIONS="-c search_path=$TAP_SCHEMA" pg_prove --trap --state hot,all,save --failures --runtests --match '^(?!__)' --jobs 9 --schema $schema -d $psql_opts $prove_opts
+
   if [ $? -gt 0 ]; then
-    fail=1
+    fail=$(($fail+1))
+  fi
+  if [ -n "$max_fail" ]; then
+    [ $fail -lt $max_fail ] || die 3 "more than $max_fail tests failed"
   fi
 done
 
